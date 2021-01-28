@@ -35,13 +35,19 @@ async function main() {
       accountIdDic[nickname] = await GetAccountId_V1(nickname);
     }
 
-    let resultList = '';
+    let resultList = [];
     for (const nickname of nicknames) {
       const result = await GetMatchListUntil_V1(nickname, targetDate.getTime());
-      resultList += `${nickname} ${result}\n`;
+      resultList.push({nickname, result})
       console.log(`nickname ${nickname}  ${result}`);
     }
-    await fs.writeFile('./test.txt', resultList);
+
+    // json to csv
+    let csv = '"nickname","result"\n';
+    for (const result of resultList) {
+      csv += `"${result.nickname}","${result.result}"\n`;
+    }
+    await fs.writeFile(`./result_${new Date().toLocaleDateString()}.csv`, '\uFEFF' + csv, 'utf-8');
   } catch (e) {
     console.log(e);
   }
