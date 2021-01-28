@@ -3,3 +3,4 @@
 package-lock.json
 *.csv
 .env
+nicknames.txt
