@@ -12,19 +12,30 @@ axiosRetry(axios, { retryDelay: (retryCount) => {
   return retryCount * 1000;
 }});
 
+const myArgs = process.argv.slice(2);
+const targetDateStr = myArgs[0];
+const [year, month, day] = targetDateStr.split("-");
+const targetDate = new Date(year, month - 1, day);
+
+if (new Date() - targetDate >= 86400 * 90 * 1000)
+  throw new Error('현재로부터 3개월을 초과하는 인자는 넣을 수 없습니다.');
+
 const accountIdDic = {};
 
 async function main() {
   try {
     const nicknameText = await fs.readFile('nicknames.txt', 'utf8');
     const nicknames = nicknameText.split('\r\n');
+    if (nicknames.length <= 1)
+      throw new Error('닉네임이 2개 이상 입력되어야 합니다.');
+
     for (const nickname of nicknames) {
       accountIdDic[nickname] = await GetAccountId_V1(nickname);
     }
 
     let resultList = '';
     for (const nickname of nicknames) {
-      const result = await GetMatchListUntil_V1(nickname, 1609528629000);
+      const result = await GetMatchListUntil_V1(nickname, targetDate.getTime());
       resultList += `${nickname} ${result}\n`;
       console.log(`nickname ${nickname}  ${result}`);
     }
@@ -69,6 +80,9 @@ async function GetAccountId_V1(nickname)
     });
 
     accountId = result["accountId"];
+    if (!accountId)
+      throw new Error(`${nickname}은 없는 닉네임입니다.`);
+
     await SetCache(cacheKey, accountId);
   }
 
