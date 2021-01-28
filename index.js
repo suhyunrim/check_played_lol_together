@@ -106,7 +106,7 @@ async function GetMatchListUntil_V1(nickname, until)
         {
           if (participant.player.summonerName != nickname && accountIdDic[participant.player.summonerName])
           {
-            const dateStr = new Date(timestamp).toLocaleDateString();
+            const dateStr = new Date(matchData.gameCreation).toLocaleDateString();
             return `${dateStr} - ${participant.player.summonerName}`;
           }
         }
