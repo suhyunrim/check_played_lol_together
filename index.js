@@ -1,8 +1,10 @@
 const fs = require('fs').promises;
 const axios = require('axios');
 const axiosRetry = require('axios-retry');
+const dotenv = require('dotenv');
 
-const tokenId = "id_token=";
+dotenv.config();
+
 const urlPrefix = "https://acs.leagueoflegends.com/v1/";
 
 const requestLimitCount = 30;
@@ -180,7 +182,7 @@ async function Request(url, params)
     const result = await axios.get(requestUrl, { 
       params,
       headers: {
-        'cookie': tokenId
+        'cookie': 'id_token=' + process.env.id_token
       }
     });
 
