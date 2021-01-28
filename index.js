@@ -24,6 +24,7 @@ if (new Date() - targetDate >= 86400 * 90 * 1000)
 
 const accountIdDic = {};
 
+const resultCache = {};
 async function main() {
   try {
     const nicknameText = await fs.readFile('nicknames.txt', 'utf8');
@@ -35,18 +36,22 @@ async function main() {
       accountIdDic[nickname] = await GetAccountId_V1(nickname);
     }
 
-    let resultList = [];
     for (const nickname of nicknames) {
-      const result = await GetMatchListUntil_V1(nickname, targetDate.getTime());
-      resultList.push({nickname, result})
-      console.log(`nickname ${nickname}  ${result}`);
+      if (resultCache[nickname])
+        continue;
+
+        console.log(`nickname ${nickname}`);
+        if (!await GetMatchListUntil_V1(nickname, targetDate.getTime())) {
+          resultCache[nickname] = 'NOT OK';
+        }
     }
 
     // json to csv
     let csv = '"nickname","result"\n';
-    for (const result of resultList) {
-      csv += `"${result.nickname}","${result.result}"\n`;
+    for (const nickname of nicknames) {
+      csv += `"${nickname}","${resultCache[nickname]}"\n`;
     }
+
     await fs.writeFile(`./result_${new Date().toLocaleDateString()}.csv`, '\uFEFF' + csv, 'utf-8');
   } catch (e) {
     console.log(e);
@@ -103,7 +108,6 @@ async function GetMatchListUntil_V1(nickname, until)
   let beginIndex = 0;
   let endIndex = 10;
 
-  let result = "NOT OK";
   while (tryCount++ < requestLimitCount) {
     const matchList = await GetMatchList_V1(nickname, beginIndex, endIndex);
 
@@ -115,13 +119,14 @@ async function GetMatchListUntil_V1(nickname, until)
     {
       const game = games[i];
       const matchData = await GetMatchData_V1(game.gameId);
-      if (!matchData)
+      if (!matchData || matchData.gameType == 'CUSTOM_GAME')
         continue;
         
       try
       {
         if (matchData.gameCreation < until) {
-          return "NOT OK(기간 초과)";
+          tryCount = requestLimitCount;
+          break;
         }
 
         for (let participant of matchData.participantIdentities)
@@ -129,7 +134,12 @@ async function GetMatchListUntil_V1(nickname, until)
           if (participant.player.summonerName != nickname && accountIdDic[participant.player.summonerName])
           {
             const dateStr = new Date(matchData.gameCreation).toLocaleDateString();
-            return `${dateStr} - ${participant.player.summonerName}`;
+            
+            if (!resultCache[nickname])
+              resultCache[nickname] = `${dateStr} - ${participant.player.summonerName}`;
+
+            if (!resultCache[participant.player.summonerName])
+              resultCache[participant.player.summonerName] = `${dateStr} - ${nickname}`;
           }
         }
       }
@@ -144,8 +154,7 @@ async function GetMatchListUntil_V1(nickname, until)
     endIndex += 10;
   }
 
-  result += ` ${beginIndex} ${endIndex}`;
-  return result;
+  return !!resultCache[nickname];
 }
 
 async function GetMatchData_V1(matchId)
