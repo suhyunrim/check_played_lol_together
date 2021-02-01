@@ -24,6 +24,10 @@ if (new Date() - targetDate >= 86400 * 90 * 1000)
 
 const accountIdDic = {};
 
+function ConvertSimplifiedName(nickname) {
+  return nickname.toLowerCase().replace(' ','');
+}
+
 const resultCache = {};
 async function main() {
   try {
@@ -33,23 +37,25 @@ async function main() {
       throw new Error('닉네임이 2개 이상 입력되어야 합니다.');
 
     for (const nickname of nicknames) {
-      accountIdDic[nickname] = await GetAccountId_V1(nickname);
+      accountIdDic[ConvertSimplifiedName(nickname)] = await GetAccountId_V1(nickname);
     }
 
     for (const nickname of nicknames) {
-      if (resultCache[nickname])
+      const simpplifiedName = ConvertSimplifiedName(nickname);
+      if (resultCache[simpplifiedName])
         continue;
 
-        console.log(`nickname ${nickname}`);
-        if (!await GetMatchListUntil_V1(nickname, targetDate.getTime())) {
-          resultCache[nickname] = 'NOT OK';
-        }
+      console.log(`nickname ${nickname}`);
+      if (!await GetMatchListUntil_V1(nickname, targetDate.getTime())) {
+        resultCache[simpplifiedName] = 'NOT OK';
+      }
     }
 
     // json to csv
     let csv = '"nickname","result"\n';
     for (const nickname of nicknames) {
-      csv += `"${nickname}","${resultCache[nickname]}"\n`;
+      const simpplifiedName = ConvertSimplifiedName(nickname);
+      csv += `"${nickname}","${resultCache[simpplifiedName]}"\n`;
     }
 
     await fs.writeFile(`./result_${new Date().toLocaleDateString()}.csv`, '\uFEFF' + csv, 'utf-8');
@@ -102,11 +108,23 @@ async function GetAccountId_V1(nickname)
   return accountId;
 }
 
+function GetTeamId(matchData, accountId)
+{
+  try {
+    const participantId = matchData.participantIdentities.find(elem => elem.player.accountId == accountId).participantId;
+    return matchData.participants.find(elem => elem.participantId == participantId).teamId;
+  } catch (e) {
+    console.log(`${accountId}은 없는 account id 입니다.`);
+    return null;
+  }
+}
+
 async function GetMatchListUntil_V1(nickname, until)
 {
   let tryCount = 0;
   let beginIndex = 0;
   let endIndex = 10;
+  const simpplifiedName = ConvertSimplifiedName(nickname);
 
   while (tryCount++ < requestLimitCount) {
     const matchList = await GetMatchList_V1(nickname, beginIndex, endIndex);
@@ -129,17 +147,30 @@ async function GetMatchListUntil_V1(nickname, until)
           break;
         }
 
+        const playerTeamId = GetTeamId(matchData, accountIdDic[simpplifiedName]);
+
         for (let participant of matchData.participantIdentities)
         {
-          if (participant.player.summonerName != nickname && accountIdDic[participant.player.summonerName])
+          const summonerName = participant.player.summonerName;
+          const targetSimplifiedName = ConvertSimplifiedName(participant.player.summonerName);
+          if (targetSimplifiedName != simpplifiedName && accountIdDic[targetSimplifiedName])
           {
+            const teamId = GetTeamId(matchData, accountIdDic[targetSimplifiedName]);
+            if (!teamId) {
+              tryCount = requestLimitCount;
+              break;
+            }
+
+            if (teamId != playerTeamId)
+              continue;
+
             const dateStr = new Date(matchData.gameCreation).toLocaleDateString();
             
-            if (!resultCache[nickname])
-              resultCache[nickname] = `${dateStr} - ${participant.player.summonerName}`;
+            if (!resultCache[simpplifiedName])
+              resultCache[simpplifiedName] = `${dateStr} - ${summonerName}`;
 
-            if (!resultCache[participant.player.summonerName])
-              resultCache[participant.player.summonerName] = `${dateStr} - ${nickname}`;
+            if (!resultCache[targetSimplifiedName])
+              resultCache[targetSimplifiedName] = `${dateStr} - ${nickname}`;
           }
         }
       }
@@ -154,7 +185,7 @@ async function GetMatchListUntil_V1(nickname, until)
     endIndex += 10;
   }
 
-  return !!resultCache[nickname];
+  return !!resultCache[simpplifiedName];
 }
 
 async function GetMatchData_V1(matchId)
