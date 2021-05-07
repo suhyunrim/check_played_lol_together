@@ -5,6 +5,10 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
+String.prototype.replaceAll = function(org, dest) {
+  return this.split(org).join(dest);
+}
+
 const urlPrefix = "https://acs.leagueoflegends.com/v1/";
 
 const requestLimitCount = 30;
@@ -23,6 +27,7 @@ if (new Date() - targetDate >= 86400 * 90 * 1000)
   throw new Error('현재로부터 3개월을 초과하는 인자는 넣을 수 없습니다.');
 
 const accountIdDic = {};
+const scoreDic = {};
 
 function ConvertSimplifiedName(nickname) {
   return nickname.toLowerCase().replace(' ','');
@@ -31,31 +36,53 @@ function ConvertSimplifiedName(nickname) {
 const resultCache = {};
 async function main() {
   try {
-    const nicknameText = await fs.readFile('nicknames.txt', 'utf8');
-    const nicknames = nicknameText.split('\r\n');
-    if (nicknames.length <= 1)
+    const userListText = await fs.readFile('nicknames.txt', 'utf8');
+    const users = userListText.split('\r\n');
+    if (users.length <= 1)
       throw new Error('닉네임이 2개 이상 입력되어야 합니다.');
 
-    for (const nickname of nicknames) {
-      accountIdDic[ConvertSimplifiedName(nickname)] = await GetAccountId_V1(nickname);
+    for (const user of users) {
+      const parsed = user.split(',');
+      const nickname = parsed[0];
+      const score = parsed.length > 1 ? Number(parsed[1]) : 1;
+      const simplifiedName = ConvertSimplifiedName(nickname);
+      accountIdDic[simplifiedName] = await GetAccountId_V1(nickname);
+      scoreDic[simplifiedName] = score;
     }
 
-    for (const nickname of nicknames) {
+    for (const user of users) {
+      const parsed = user.split(',');
+      const nickname = parsed[0];
       const simpplifiedName = ConvertSimplifiedName(nickname);
-      if (resultCache[simpplifiedName])
-        continue;
-
       console.log(`nickname ${nickname}`);
       if (!await GetMatchListUntil_V1(nickname, targetDate.getTime())) {
-        resultCache[simpplifiedName] = 'NOT OK';
+        resultCache[simpplifiedName] = 0;
       }
     }
 
     // json to csv
-    let csv = '"nickname","result"\n';
-    for (const nickname of nicknames) {
+    let csv = '"nickname","result","list"\n';
+    for (const user of users) {
+      const parsed = user.split(',');
+      const nickname = parsed[0];
       const simpplifiedName = ConvertSimplifiedName(nickname);
-      csv += `"${nickname}","${resultCache[simpplifiedName]}"\n`;
+      csv += `"${nickname}",`;
+      if (resultCache[simpplifiedName] == 0) {
+        csv += `${resultCache[simpplifiedName]}\n`;
+      }
+      else {
+        let json = JSON.stringify([...resultCache[simpplifiedName]]);
+        json = json.replaceAll('"','');
+        json = json.replaceAll(',','|');
+
+        let score = Math.floor(scoreDic[ConvertSimplifiedName(nickname)] / 3) * 2;
+        resultCache[simpplifiedName].forEach((nickname) => {
+          score += scoreDic[ConvertSimplifiedName(nickname)];
+        });
+
+        csv += `${score},${json}\n`;
+      }
+      
     }
 
     await fs.writeFile(`./result_${new Date().toLocaleDateString()}.csv`, '\uFEFF' + csv, 'utf-8');
@@ -164,13 +191,15 @@ async function GetMatchListUntil_V1(nickname, until)
             if (teamId != playerTeamId)
               continue;
 
-            const dateStr = new Date(matchData.gameCreation).toLocaleDateString();
-            
             if (!resultCache[simpplifiedName])
-              resultCache[simpplifiedName] = `${dateStr} - ${summonerName}`;
+              resultCache[simpplifiedName] = new Set();
+
+            resultCache[simpplifiedName].add(summonerName);
 
             if (!resultCache[targetSimplifiedName])
-              resultCache[targetSimplifiedName] = `${dateStr} - ${nickname}`;
+              resultCache[targetSimplifiedName] = new Set();
+
+            resultCache[targetSimplifiedName].add(nickname);
           }
         }
       }
