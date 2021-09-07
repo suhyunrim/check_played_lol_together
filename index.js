@@ -61,7 +61,7 @@ async function main() {
     }
 
     // json to csv
-    let csv = '"nickname","result","list"\n';
+    let csv = '"nickname","count","point","onePointCount","list"\n';
     for (const user of users) {
       const parsed = user.split(',');
       const nickname = parsed[0];
@@ -75,12 +75,16 @@ async function main() {
         json = json.replaceAll('"','');
         json = json.replaceAll(',','|');
 
-        let score = Math.floor(scoreDic[ConvertSimplifiedName(nickname)] / 3) * 2;
+        let onePointCount = 0;
+        let score = Math.floor(scoreDic[simpplifiedName] / 3) * 2;
         resultCache[simpplifiedName].forEach((nickname) => {
-          score += scoreDic[ConvertSimplifiedName(nickname)];
+          let userPoint = scoreDic[ConvertSimplifiedName(nickname)];
+          score += userPoint;
+          if (userPoint == 1)
+            onePointCount++;
         });
 
-        csv += `${score},${json}\n`;
+        csv += `${resultCache[simpplifiedName].size},${score},${onePointCount},${json}\n`;
       }
       
     }
@@ -108,7 +112,7 @@ async function GetCache(cacheKey)
 
 async function SetCache(cacheKey, text)
 {
-  await fs.writeFile(`./cache/${cacheKey}`, text);
+  await fs.writeFile(`./cache/${cacheKey}`, String(text));
 }
 
 async function GetAccountId_V1(nickname)
@@ -155,7 +159,8 @@ async function GetMatchListUntil_V1(nickname, until)
 
   while (tryCount++ < requestLimitCount) {
     const matchList = await GetMatchList_V1(nickname, beginIndex, endIndex);
-
+    sleep(1000);
+    
     const games = matchList.games.games;
     if (games.length == 0)
       break;
@@ -164,6 +169,8 @@ async function GetMatchListUntil_V1(nickname, until)
     {
       const game = games[i];
       const matchData = await GetMatchData_V1(game.gameId);
+      sleep(1000);
+
       if (!matchData || matchData.gameType == 'CUSTOM_GAME')
         continue;
         
@@ -279,4 +286,9 @@ async function Request(url, params)
     console.log(e);
     return e;
   }
+}
+
+function sleep(ms) {
+  const wakeUpTime = Date.now() + ms;
+  while (Date.now() < wakeUpTime) {}
 }
